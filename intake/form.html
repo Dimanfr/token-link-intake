@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Campaign contact list</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; color: #1d2433; background: #fff; }
+  textarea { width: 100%; min-height: 10rem; font: 14px monospace; }
+  label { display: block; margin: .4rem 0; }
+  button { font: inherit; padding: .5rem 1.2rem; }
+  #out { white-space: pre-wrap; background: #f3f5f9; padding: .8rem; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1 id="title">Campaign contact list</h1>
+<p id="info">Loading…</p>
+<form id="form" hidden>
+  <p>Upload a CSV with the columns <code>company</code>, <code>phone</code> and optionally <code>contact_name</code>.</p>
+  <input type="file" id="file" accept=".csv,text/csv">
+  <textarea id="csv" placeholder="company,phone,contact_name"></textarea>
+  <label><input type="checkbox" name="data_ownership"> We own this data or may share it for this campaign.</label>
+  <label><input type="checkbox" name="lawful_basis"> We have a lawful basis to have these contacts called.</label>
+  <label><input type="checkbox" name="campaign_owner"> We commission this campaign.</label>
+  <button type="submit">Submit</button>
+</form>
+<p id="out" hidden></p>
+<script>
+const token = location.pathname.split("/").filter(Boolean).pop();
+const api = "/api/intake/" + encodeURIComponent(token);
+const out = document.getElementById("out");
+function show(text) { out.hidden = false; out.textContent = text; }
+fetch(api).then(r => r.json().then(d => [r.status, d])).then(([status, d]) => {
+  if (status !== 200) { document.getElementById("info").textContent = d.error; return; }
+  document.getElementById("title").textContent = d.campaign_name;
+  document.getElementById("info").textContent = "This link is valid until " + d.expires_at.slice(0, 10) + " and can be submitted once.";
+  document.getElementById("form").hidden = false;
+});
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (f) f.text().then(t => document.getElementById("csv").value = t);
+});
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const confirmations = {};
+  for (const box of e.target.querySelectorAll("input[type=checkbox]")) confirmations[box.name] = box.checked;
+  fetch(api, { method: "POST", headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ csv: document.getElementById("csv").value, confirmations }) })
+    .then(r => r.json().then(d => [r.status, d]))
+    .then(([status, d]) => show(status === 201
+      ? "Thank you. Accepted: " + d.accepted + ", rejected rows: " + d.rejected.length + ", duplicates: " + d.duplicates_in_file
+      : status + ": " + d.error + (d.details.length ? "\n" + JSON.stringify(d.details, null, 1) : "")));
+});
+</script>
+</body>
+</html>
